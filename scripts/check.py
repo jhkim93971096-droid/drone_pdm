@@ -288,6 +288,12 @@ def check_operations():
 
 
 
+def table_by_columns(app, required):
+    matches=[element.value for element in app.dataframe if required.issubset(element.value.columns)]
+    assert len(matches)==1, '검사할 표를 하나로 식별하지 못했습니다'
+    return matches[0]
+
+
 def check_app():
     import logging
     import joblib
@@ -314,42 +320,43 @@ def check_app():
         app=AppTest.from_file(str(ROOT/'app.py'),default_timeout=45).run()
         assert not app.exception, str(app.exception)
         assert not app.error, '앱 데이터 로딩 오류'
-        table=app.dataframe[0].value
+        assert [tab.label for tab in app.tabs]==['① 관제 현황','② 재점검 목록','③ 장비별 근거','④ 검증·모델 정보']
+        table=table_by_columns(app, {'드론','전체 순위'})
         assert table['드론'].tolist()==scored.equipment_id.tolist()
         assert table['전체 순위'].tolist()==scored['rank'].tolist()
         assert app.metric[1].value==f'{int(scored.selected.sum()):,}대'
-        summary=app.dataframe[1].value
+        summary=table_by_columns(app, {'부대','후보','점검선정'})
         assert int(summary['후보'].sum())==len(scored)
         assert int(summary['점검선정'].sum())==int(scored.selected.sum())
         unit=sorted(scored.unit_code.unique())[0]
         app.selectbox(key='unit').select(unit).run()
         assert not app.exception
-        filtered=app.dataframe[0].value
+        filtered=table_by_columns(app, {'드론','전체 순위'})
         target=scored.loc[scored.unit_code.eq(unit)]
         assert filtered['드론'].tolist()==target.equipment_id.tolist()
         assert filtered['전체 순위'].tolist()==target['rank'].tolist()
-        assert_frame_equal(app.dataframe[1].value,summary)
+        assert_frame_equal(table_by_columns(app, {'부대','후보','점검선정'}),summary)
         app.selectbox(key='unit').select('전체').run()
         kind=sorted(scored.equipment_type.unique())[0]
         app.selectbox(key='kind').select(kind).run()
         assert not app.exception
-        assert app.dataframe[0].value['드론'].tolist()==scored.loc[scored.equipment_type.eq(kind),'equipment_id'].tolist()
+        assert table_by_columns(app, {'드론','전체 순위'})['드론'].tolist()==scored.loc[scored.equipment_type.eq(kind),'equipment_id'].tolist()
         app.selectbox(key='kind').select('전체').run()
         for scope,mask in [('선정 대상',scored.selected),('초과 대기',scored.overflow),('예방 점검',scored.supplementary),('기준 이상',scored.flagged)]:
             app.selectbox(key='scope').select(scope).run()
             assert not app.exception and not app.error
-            assert app.dataframe[0].value['드론'].tolist()==scored.loc[mask,'equipment_id'].tolist()
+            assert table_by_columns(app, {'드론','전체 순위'})['드론'].tolist()==scored.loc[mask,'equipment_id'].tolist()
         app.selectbox(key='scope').select('전체').run()
         first=scored.equipment_id.iloc[0]
         app.text_input(key='search').set_value(first.lower()).run()
         assert not app.exception
-        assert app.dataframe[0].value['드론'].tolist()==[first]
+        assert table_by_columns(app, {'드론','전체 순위'})['드론'].tolist()==[first]
         app.text_input(key='search').set_value('NO-SUCH-DRONE').run()
-        assert not app.exception and app.dataframe[0].value.empty
+        assert not app.exception and table_by_columns(app, {'드론','전체 순위'}).empty
         app.button[0].click().run()
         assert not app.exception
         assert app.text_input(key='search').value==''
-        assert app.dataframe[0].value['드론'].tolist()==scored.equipment_id.tolist()
+        assert table_by_columns(app, {'드론','전체 순위'})['드론'].tolist()==scored.equipment_id.tolist()
         assert len(app.get('vega_lite_chart'))==2
         assert len(app.get('download_button'))==1
         assert before=={p:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
@@ -565,7 +572,7 @@ def main():
         check_app()
         print('[확인 통과] 7단계 앱')
         print('  앱 실행·최신 장비 선정·모델 확률·부대별 합계 확인')
-        print('  부대·유형·상태·검색·초기화·차트·다운로드·순위/원본 보존 확인')
+        print('  탭 구성·부대/유형/상태·검색·초기화·차트·다운로드·순위/원본 보존 확인')
         print('  시각적 배치 검사는 포함하지 않음')
     except Exception as exc:
         app_errors.append(f'{type(exc).__name__}: {exc}')
