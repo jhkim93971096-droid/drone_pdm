@@ -339,6 +339,19 @@ def check_app():
             app.selectbox(key='scope').select(scope).run()
             assert not app.exception and not app.error
             assert app.dataframe[0].value['드론'].tolist()==scored.loc[mask,'equipment_id'].tolist()
+        app.selectbox(key='scope').select('전체').run()
+        first=scored.equipment_id.iloc[0]
+        app.text_input(key='search').set_value(first.lower()).run()
+        assert not app.exception
+        assert app.dataframe[0].value['드론'].tolist()==[first]
+        app.text_input(key='search').set_value('NO-SUCH-DRONE').run()
+        assert not app.exception and app.dataframe[0].value.empty
+        app.button[0].click().run()
+        assert not app.exception
+        assert app.text_input(key='search').value==''
+        assert app.dataframe[0].value['드론'].tolist()==scored.equipment_id.tolist()
+        assert len(app.get('vega_lite_chart'))==2
+        assert len(app.get('download_button'))==1
         assert before=={p:hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
     finally:
         logging.disable(previous)
@@ -552,7 +565,7 @@ def main():
         check_app()
         print('[확인 통과] 7단계 앱')
         print('  앱 실행·최신 장비 선정·모델 확률·부대별 합계 확인')
-        print('  부대·유형·상태 필터·전체 순위 보존·원본/모델 불변 확인')
+        print('  부대·유형·상태·검색·초기화·차트·다운로드·순위/원본 보존 확인')
         print('  시각적 배치 검사는 포함하지 않음')
     except Exception as exc:
         app_errors.append(f'{type(exc).__name__}: {exc}')
